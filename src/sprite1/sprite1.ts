@@ -1,8 +1,8 @@
-import Game from '../src/Game';
-import StaticScene from '../src/scenes/StaticScene';
-import Sprite from '../src/gameobjects/sprite/Sprite';
-import ImageFile from '../src/loader/files/ImageFile';
-import AddChild from '../src/gameobjects/container/AddChild';
+import Game from '@phaserjs/phaser/Game';
+import StaticScene from '@phaserjs/phaser/scenes/StaticScene';
+import Sprite from '@phaserjs/phaser/gameobjects/sprite/Sprite';
+import ImageFile from '@phaserjs/phaser/loader/files/ImageFile';
+import AddChild from '@phaserjs/phaser/gameobjects/container/AddChild';
 
 class Demo extends StaticScene
 {
