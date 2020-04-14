@@ -1,0 +1,31 @@
+{
+    "name": "@phaserjs/examples",
+    "version": "0.0.0",
+    "description": "Phaser 4 Examples",
+    "scripts": {
+        "prepublishOnly": "echo \"Error: Don't run 'npm publish' in root. Use 'npm run dist' instead.\" && exit 1",
+        "build": "rollup -c rollup.config.js",
+        "watch": "tsc --watch --pretty"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/phaserjs/examples.git"
+    },
+    "keywords": [
+        "Phaser"
+    ],
+    "author": "Richard Davey <rich@photonstorm.com> (http://www.photonstorm.com)",
+    "license": "MIT",
+    "licenseUrl": "http://www.opensource.org/licenses/mit-license.php",
+    "bugs": {
+        "url": "https://github.com/phaserjs/examples/issues"
+    },
+    "homepage": "https://github.com/phaserjs/examples#readme",
+    "devDependencies": {
+        "rollup": "^2.6.1",
+        "rollup-plugin-node-resolve": "^5.2.0",
+        "rollup-plugin-terser": "^5.3.0",
+        "rollup-plugin-typescript2": "^0.27.0",
+        "typescript": "^3.8.3"
+    }
+}
