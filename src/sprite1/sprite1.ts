@@ -16,7 +16,9 @@ class Demo extends StaticScene
 
             this.logo = new Sprite(400, 300, 'logo');
 
-            AddChild(this.world, this.logo);
+            const logo2 = new Sprite(400, 400, 'logo').setScale(0.5);
+
+            AddChild(this.world, this.logo, logo2);
 
             this.willUpdate = true;
     
@@ -29,13 +31,10 @@ class Demo extends StaticScene
     }
 }
 
-export default function ()
-{
-    new Game({
-        width: 800,
-        height: 600,
-        backgroundColor: 0x330033,
-        parent: 'gameParent',
-        scene: Demo
-    });
-}
+new Game({
+    width: 800,
+    height: 600,
+    backgroundColor: 0x330033,
+    parent: 'gameParent',
+    scene: Demo
+});

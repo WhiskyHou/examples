@@ -1,5 +1,6 @@
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
+import { terser } from 'rollup-plugin-terser';
 import filesize from 'rollup-plugin-filesize';
 import image from '@rollup/plugin-image';
 
@@ -10,7 +11,7 @@ const extensions = [
 //  --input src/sprite1/sprite1.ts
 const filenameTS = process.argv[process.argv.length - 1];
 const filenamePUBLIC = filenameTS.replace('src/', 'public/');
-const filenameJS = filenamePUBLIC.replace('.ts', '.js');
+const filenameMINJS = filenamePUBLIC.replace('.ts', '.min.js');
 
 export default {
 
@@ -19,11 +20,12 @@ export default {
 
     output: [
         {
-            file: filenameJS,
+            file: filenameMINJS,
             format: 'iife',
             name: 'Phaser4Example',
-            sourcemap: true,
+            sourcemap: false,
             plugins: [
+                terser(),
                 filesize()
             ]
         }
