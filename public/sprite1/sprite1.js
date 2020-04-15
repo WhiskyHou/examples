@@ -311,13 +311,14 @@ void main (void)
         }
     }
 
-    function Matrix2dEqual(mat1, mat2) {
-        return (mat1[0] === mat2[0] &&
-            mat1[1] === mat2[1] &&
-            mat1[2] === mat2[2] &&
-            mat1[3] === mat2[3] &&
-            mat1[4] === mat2[4] &&
-            mat1[5] === mat2[5]);
+    //  Compares the a and b matrix and returns if they are equal.
+    function ExactEquals(a, b) {
+        return (a.a === b.a &&
+            a.b === b.b &&
+            a.c === b.c &&
+            a.d === b.d &&
+            a.tx === b.tx &&
+            a.ty === b.ty);
     }
 
     function Ortho(width, height, near = -1, far = 1) {
@@ -503,7 +504,7 @@ void main (void)
                 let camera = sceneList[c];
                 let list = sceneList[c + 1];
                 //  This only needs rebinding if the camera matrix is different to before
-                if (!prevCamera || !Matrix2dEqual(camera.worldTransform, prevCamera.worldTransform)) {
+                if (!prevCamera || !ExactEquals(camera.worldTransform, prevCamera.worldTransform)) {
                     shader.flush();
                     shader.bind(projectionMatrix, camera.matrix);
                     prevCamera = camera;
@@ -1192,6 +1193,53 @@ void main (void)
         }
     }
 
+    //  A Matrix2D contains six elements in a short-form of the 3x3 Matrix, with the last column ignored.
+    //  |----|----|----|
+    //  | a  | b  | 0  |
+    //  |----|----|----|
+    //  | c  | d  | 0  |
+    //  |----|----|----|
+    //  | tx | ty | 1  |
+    //  |----|----|----|
+    class Matrix2D {
+        /**
+         * Creates an instance of Matrix2D.
+         *
+         * @param {number} [a=1] - X scale.
+         * @param {number} [b=0] - X skew.
+         * @param {number} [c=0] - Y skew.
+         * @param {number} [d=1] - Y scale.
+         * @param {number} [tx=0] - X translation
+         * @param {number} [ty=0] - Y translation
+         * @memberof Matrix2D
+         */
+        constructor(a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0) {
+            this.set(a, b, c, d, tx, ty);
+        }
+        set(a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+            this.d = d;
+            this.tx = tx;
+            this.ty = ty;
+            return this;
+        }
+        identity() {
+            return this.set();
+        }
+        toArray() {
+            return [this.a, this.b, this.c, this.d, this.tx, this.ty];
+        }
+        fromArray(src) {
+            return this.set(src[0], src[1], src[2], src[3], src[4], src[5]);
+        }
+        [Symbol.iterator]() {
+            const data = this.toArray();
+            return data[Symbol.iterator]();
+        }
+    }
+
     //  A Static World is designed specifically to have a bounds of a fixed size
     //  and a camera that doesn't move at all (no scrolling, rotation, etc)
     //  Because it has a fixed size, there is no camera culling enabled.
@@ -1208,7 +1256,7 @@ void main (void)
             this.scene = scene;
             this.children = [];
             this.renderList = [];
-            this.worldTransform = new Float32Array([1, 0, 0, 1, 0, 0]);
+            this.worldTransform = new Matrix2D();
             this.camera = new StaticCamera(scene);
         }
         scanChildren(root, gameFrame) {
@@ -1355,11 +1403,16 @@ void main (void)
         ANGLE: 9
     };
 
+    //  Copy the values from the src Matrix to the target Matrix and return the target Matrix.
+    function Copy(src, target) {
+        return target.set(src.a, src.b, src.c, src.d, src.tx, src.ty);
+    }
+
     class TransformGameObject extends GameObject {
         constructor(x = 0, y = 0) {
             super();
             const byte = Float32Array.BYTES_PER_ELEMENT;
-            const buffer = new ArrayBuffer(22 * byte);
+            const buffer = new ArrayBuffer(10 * byte);
             this.transformBuffer = buffer;
             /**
              * transformData:
@@ -1373,40 +1426,19 @@ void main (void)
              * 7 = scale y
              * 8 = rotation
              * 9 = angle
-             * localTransform
-             * 10 = local transform a
-             * 11 = local transform b
-             * 12 = local transform c
-             * 13 = local transform d
-             * 14 = local transform tx
-             * 15 = local transform ty
-             * worldTransform
-             * 16 = world transform a
-             * 17 = world transform b
-             * 18 = world transform c
-             * 19 = world transform d
-             * 20 = world transform tx
-             * 21 = world transform ty
              */
             this.transformData = new Float32Array(buffer, 0, 10);
-            this.localTransform = new Float32Array(buffer, byte * 10, 6);
-            this.worldTransform = new Float32Array(buffer, byte * 16, 6);
+            this.localTransform = new Matrix2D();
+            this.worldTransform = new Matrix2D();
             this.transformData.set([x, y, 0.5, 0.5, 0, 0, 1, 1, 0, 0]);
-            this.localTransform.set([1, 0, 0, 1, 0, 0]);
-            this.worldTransform.set([1, 0, 0, 1, 0, 0]);
             this.width = 0;
             this.height = 0;
             this.updateCache();
         }
         updateCache() {
             const transform = this.localTransform;
-            const { rotation, skewX, skewY, scaleX, scaleY } = this;
-            transform.set([
-                Math.cos(rotation + skewY) * scaleX,
-                Math.sin(rotation + skewY) * scaleX,
-                -Math.sin(rotation - skewX) * scaleY,
-                Math.cos(rotation - skewX) * scaleY
-            ]);
+            const { rotation, skewX, skewY, scaleX, scaleY, x, y } = this;
+            transform.set(Math.cos(rotation + skewY) * scaleX, Math.sin(rotation + skewY) * scaleX, -Math.sin(rotation - skewX) * scaleY, Math.cos(rotation - skewX) * scaleY, x, y);
             return this.updateTransform();
         }
         updateTransform() {
@@ -1414,22 +1446,15 @@ void main (void)
             const parent = this.parent;
             const lt = this.localTransform;
             const wt = this.worldTransform;
-            lt[4] = this.x;
-            lt[5] = this.y;
+            lt.tx = this.x;
+            lt.ty = this.y;
             if (!parent) {
-                wt.set(lt);
+                Copy(lt, wt);
                 return this;
             }
-            const [a, b, c, d, tx, ty] = lt;
-            const [pa, pb, pc, pd, ptx, pty] = parent.worldTransform;
-            wt.set([
-                a * pa + b * pc,
-                a * pb + b * pd,
-                c * pa + d * pc,
-                c * pb + d * pd,
-                tx * pa + ty * pc + ptx,
-                tx * pb + ty * pd + pty
-            ]);
+            const { a, b, c, d, tx, ty } = lt;
+            const { a: pa, b: pb, c: pc, d: pd, tx: ptx, ty: pty } = parent.worldTransform;
+            wt.set(a * pa + b * pc, a * pb + b * pd, c * pa + d * pc, c * pb + d * pd, tx * pa + ty * pc + ptx, tx * pb + ty * pd + pty);
             return this;
         }
         setSize(width, height) {
