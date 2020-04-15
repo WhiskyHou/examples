@@ -16,3 +16,8 @@ To run a watch on an example:
 ```js
 npm run watch --input src/sprite1/sprite1.ts
 ```
+To run a watch and an http-server on an example:
+
+```js
+npm run serve --input src/sprite1/sprite1.ts
+```
