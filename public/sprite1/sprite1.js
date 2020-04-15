@@ -719,7 +719,24 @@ void main (void)
         }
     }
 
-    function IsPowerOfTwo(width, height) {
+    /**
+     * @author       Richard Davey <rich@photonstorm.com>
+     * @copyright    2020 Photon Storm Ltd.
+     * @license      {@link https://opensource.org/licenses/MIT|MIT License}
+     */
+    /**
+     * Checks if the given `width` and `height` are a power of two.
+     * Useful for checking texture dimensions.
+     *
+     * @function Phaser.Math.Pow2.IsSize
+     * @since 3.0.0
+     *
+     * @param {number} width - The width.
+     * @param {number} height - The height.
+     *
+     * @return {boolean} `true` if `width` and `height` are a power of two, otherwise `false`.
+     */
+    function IsSizePowerOfTwo(width, height) {
         if (width < 1 || height < 1) {
             return false;
         }
@@ -743,7 +760,7 @@ void main (void)
         const mode = (linear) ? gl.LINEAR : gl.NEAREST;
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mode);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mode);
-        const pot = (source && IsPowerOfTwo(width, height));
+        const pot = (source && IsSizePowerOfTwo(width, height));
         const wrap = (pot && potClamp) ? gl.REPEAT : gl.CLAMP_TO_EDGE;
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
