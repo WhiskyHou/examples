@@ -3,8 +3,5 @@
         "target": "esnext",
         "moduleResolution": "node",
         "allowSyntheticDefaultImports": true
-    },
-    "include": [
-        "**/*"
-    ]
+    }
 }

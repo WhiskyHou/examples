@@ -7,7 +7,12 @@ const extensions = [
     '.js', '.jsx', '.ts', '.tsx'
 ];
 
-//  --input src/sprite1/sprite1.ts
+//  To build:
+//  npm run build --input src/sprite1/sprite1.ts
+
+//  For files with special characters in, quote them:
+//  npm run build --input "src/container/add child.ts"
+
 const filenameTS = process.argv[process.argv.length - 1];
 const filenamePUBLIC = filenameTS.replace('src/', 'public/');
 const filenameJS = filenamePUBLIC.replace('.ts', '.js');
@@ -54,6 +59,7 @@ export default {
         }),
 
         typescript({
+            include: filenameTS,
             tsconfig: './tsconfig.json'
         })
 
