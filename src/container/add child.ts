@@ -1,8 +1,8 @@
-import { Game, StaticScene } from '@phaserjs/phaser';
-import { Size, Parent, Scenes } from '@phaserjs/phaser/config';
 import { SolidColorTexture } from '@phaserjs/phaser/textures/types';
 import { Container, AddChild } from '@phaserjs/phaser/gameobjects/container';
 import { Sprite } from '@phaserjs/phaser/gameobjects/sprite';
+import { Game, StaticScene } from '@phaserjs/phaser';
+import { Size, Parent, Scenes } from '@phaserjs/phaser/config';
 
 class Demo extends StaticScene
 {

@@ -29,7 +29,7 @@ export default {
             name: 'Phaser4Example',
             sourcemap: true,
             plugins: [
-                filesize()
+                // filesize()
             ]
         }
     ],
