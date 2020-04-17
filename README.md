@@ -5,6 +5,12 @@ To build an example you must provide the full path to the TypeScript filename as
 ```js
 npm run build --input src/sprite1/sprite1.ts
 ```
+If the filename has spaces, or other special characters in, quote it:
+
+```js
+npm run build --input "src/container/add child.ts"
+```
+
 To bundle a minified dist version of an example:
 
 ```js
