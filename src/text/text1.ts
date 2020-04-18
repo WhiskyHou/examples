@@ -1,4 +1,4 @@
-import { AddChild } from '@phaserjs/phaser/gameobjects/container';
+import AddChild from '@phaserjs/phaser/gameobjects/container/AddChild';
 import { Game, StaticScene } from '@phaserjs/phaser';
 import { BackgroundColor, Size, Parent, Scenes } from '@phaserjs/phaser/config';
 import { Text, SetPadding, SetFont, SetBackgroundStyle } from '@phaserjs/phaser/gameobjects/text';

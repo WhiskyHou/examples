@@ -1,8 +1,8 @@
-import Game from '@phaserjs/phaser/Game';
-import StaticScene from '@phaserjs/phaser/scenes/StaticScene';
+import AddChild from '@phaserjs/phaser/gameobjects/container/AddChild';
+import { Game, StaticScene } from '@phaserjs/phaser';
+import { BackgroundColor, Size, Parent, Scenes } from '@phaserjs/phaser/config';
 import Sprite from '@phaserjs/phaser/gameobjects/sprite/Sprite';
 import ImageFile from '@phaserjs/phaser/loader/files/ImageFile';
-import AddChild from '@phaserjs/phaser/gameobjects/container/AddChild';
 
 class Demo extends StaticScene
 {
@@ -31,10 +31,9 @@ class Demo extends StaticScene
     }
 }
 
-new Game({
-    width: 800,
-    height: 600,
-    backgroundColor: 0x330033,
-    parent: 'gameParent',
-    scene: Demo
-});
+new Game(
+    Size(800, 600),
+    Parent('example'),
+    BackgroundColor(0x640b50),
+    Scenes(Demo)
+);
