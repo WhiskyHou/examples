@@ -1,7 +1,7 @@
-import resolve from '@rollup/plugin-node-resolve';
-import typescript from '@rollup/plugin-typescript';
 import filesize from 'rollup-plugin-filesize';
 import image from '@rollup/plugin-image';
+import resolve from '@rollup/plugin-node-resolve';
+import typescript from '@rollup/plugin-typescript';
 
 const extensions = [
     '.js', '.jsx', '.ts', '.tsx'
@@ -18,7 +18,7 @@ const filenamePUBLIC = filenameTS.replace('src/', 'public/');
 const filenameJS = filenamePUBLIC.replace('.ts', '.js');
 
 export default {
-
+    
     //  no 'input' because you have to pass it on the command-line:
     //  npm run build --input src/sprite1/sprite1.ts
 
@@ -29,7 +29,7 @@ export default {
             name: 'Phaser4Example',
             sourcemap: true,
             plugins: [
-                // filesize()
+                filesize()
             ]
         }
     ],
@@ -55,6 +55,8 @@ export default {
         }),
 
         resolve({
+            mainFields: [ 'module' ],
+            modulesOnly: true,
             extensions
         }),
 
