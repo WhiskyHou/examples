@@ -1,5 +1,5 @@
+import { CanvasRenderer, Parent, Scenes } from '@phaserjs/phaser/config';
 import { Game, Scene } from '@phaserjs/phaser';
-import { Parent, Scenes } from '@phaserjs/phaser/config';
 
 import { AddChild } from '@phaserjs/phaser/gameobjects/AddChild';
 import { PICO8 } from '@phaserjs/phaser/textures/palettes/PICO8';
@@ -38,6 +38,7 @@ class Demo extends Scene
 }
 
 new Game(
+    CanvasRenderer(),
     Parent('example'),
     Scenes(Demo)
 );
