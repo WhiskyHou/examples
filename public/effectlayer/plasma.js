@@ -1,6 +1,170 @@
 (function () {
     'use strict';
 
+    function DepthFirstSearch(parent) {
+        const stack = [parent];
+        const output = [];
+        while (stack.length > 0) {
+            const node = stack.shift();
+            output.push(node);
+            const numChildren = node.numChildren;
+            if (numChildren > 0) {
+                for (let i = numChildren - 1; i >= 0; i--) {
+                    stack.unshift(node.children[i]);
+                }
+            }
+        }
+        output.shift();
+        return output;
+    }
+
+    function GetChildIndex(parent, child) {
+        return parent.children.indexOf(child);
+    }
+
+    function RemoveChildAt(parent, index) {
+        const children = parent.children;
+        let child;
+        if (index >= 0 && index < children.length) {
+            const removed = children.splice(index, 1);
+            if (removed[0]) {
+                child = removed[0];
+                child.parent = null;
+            }
+        }
+        return child;
+    }
+
+    function RemoveChild(parent, child) {
+        const currentIndex = GetChildIndex(parent, child);
+        if (currentIndex > -1) {
+            RemoveChildAt(parent, currentIndex);
+        }
+        return child;
+    }
+
+    const AddedToWorldEvent = 'addedtoworld';
+
+    const RemovedFromWorldEvent = 'removedfromworld';
+
+    function Emit(emitter, event, ...args) {
+        if (emitter.events.size === 0 || !emitter.events.has(event)) {
+            return false;
+        }
+        const listeners = emitter.events.get(event);
+        for (const ee of listeners) {
+            ee.callback.apply(ee.context, args);
+            if (ee.once) {
+                listeners.delete(ee);
+            }
+        }
+        if (listeners.size === 0) {
+            emitter.events.delete(event);
+        }
+        return true;
+    }
+
+    function SetWorld(world, ...children) {
+        children.forEach(child => {
+            if (child.world) {
+                Emit(child.world, RemovedFromWorldEvent, child, child.world);
+                Emit(child, RemovedFromWorldEvent, child, child.world);
+            }
+            child.world = world;
+            Emit(world, AddedToWorldEvent, child, world);
+            Emit(child, AddedToWorldEvent, child, world);
+        });
+        return children;
+    }
+
+    function SetParent(parent, ...children) {
+        children.forEach(child => {
+            if (child.parent) {
+                RemoveChild(child.parent, child);
+            }
+            child.parent = parent;
+        });
+        const parentWorld = parent.world;
+        if (parentWorld) {
+            SetWorld(parentWorld, ...DepthFirstSearch(parent));
+        }
+        return children;
+    }
+
+    function AddChild(parent, child) {
+        parent.children.push(child);
+        SetParent(parent, child);
+        child.transform.updateWorld();
+        return child;
+    }
+
+    function AddChildren(parent, ...children) {
+        children.forEach(child => {
+            AddChild(parent, child);
+        });
+        return children;
+    }
+
+    const DIRTY_CONST = {
+        CLEAR: 0,
+        TRANSFORM: 1,
+        UPDATE: 2,
+        CHILD_CACHE: 4,
+        POST_RENDER: 8,
+        COLORS: 16,
+        BOUNDS: 32,
+        TEXTURE: 64,
+        FRAME: 128,
+        ALPHA: 256,
+        CHILD: 512,
+        DEFAULT: 1 + 2 + 16 + 32,
+        USER1: 536870912,
+        USER2: 1073741824,
+        USER3: 2147483648,
+        USER4: 4294967296
+    };
+
+    function RemoveChildrenBetween(parent, beginIndex = 0, endIndex) {
+        const children = parent.children;
+        if (endIndex === undefined) {
+            endIndex = children.length;
+        }
+        const range = endIndex - beginIndex;
+        if (range > 0 && range <= endIndex) {
+            const removed = children.splice(beginIndex, range);
+            removed.forEach(child => {
+                child.parent = null;
+            });
+            return removed;
+        }
+        else {
+            return [];
+        }
+    }
+
+    function DestroyChildren(parent, beginIndex = 0, endIndex) {
+        const removed = RemoveChildrenBetween(parent, beginIndex, endIndex);
+        removed.forEach(child => {
+            child.destroy();
+        });
+    }
+
+    function RemoveChildren(parent, ...children) {
+        children.forEach(child => {
+            RemoveChild(parent, child);
+        });
+        return children;
+    }
+
+    function ReparentChildren(parent, newParent, beginIndex = 0, endIndex) {
+        const moved = RemoveChildrenBetween(parent, beginIndex, endIndex);
+        SetParent(newParent, ...moved);
+        moved.forEach(child => {
+            child.transform.updateWorld();
+        });
+        return moved;
+    }
+
     let instance;
     let frame = 0;
     let elapsed = 0;
@@ -184,7 +348,7 @@
         pop() {
             this.stack.pop();
             const len = this.stack.length;
-            if (len > 1) {
+            if (len > 0) {
                 const entry = this.stack[len - 1];
                 this.set(entry.framebuffer, false, entry.width, entry.height);
             }
@@ -1273,168 +1437,11 @@ void main (void)
         }
     }
 
-    function DepthFirstSearch(parent) {
-        const stack = [parent];
-        const output = [];
-        while (stack.length > 0) {
-            const node = stack.shift();
-            output.push(node);
-            const numChildren = node.numChildren;
-            if (numChildren > 0) {
-                for (let i = numChildren - 1; i >= 0; i--) {
-                    stack.unshift(node.children[i]);
-                }
-            }
-        }
-        output.shift();
-        return output;
-    }
-
-    function GetChildIndex(parent, child) {
-        return parent.children.indexOf(child);
-    }
-
-    function RemoveChildAt(parent, index) {
-        const children = parent.children;
-        let child;
-        if (index >= 0 && index < children.length) {
-            const removed = children.splice(index, 1);
-            if (removed[0]) {
-                child = removed[0];
-                child.parent = null;
-            }
-        }
-        return child;
-    }
-
-    function RemoveChild(parent, child) {
-        const currentIndex = GetChildIndex(parent, child);
-        if (currentIndex > -1) {
-            RemoveChildAt(parent, currentIndex);
-        }
-        return child;
-    }
-
-    const AddedToWorldEvent = 'addedtoworld';
-
     const DestroyEvent = 'destroy';
 
     const PostUpdateEvent = 'postupdate';
 
-    const RemovedFromWorldEvent = 'removedfromworld';
-
     const UpdateEvent = 'update';
-
-    function Emit(emitter, event, ...args) {
-        if (emitter.events.size === 0 || !emitter.events.has(event)) {
-            return false;
-        }
-        const listeners = emitter.events.get(event);
-        for (const ee of listeners) {
-            ee.callback.apply(ee.context, args);
-            if (ee.once) {
-                listeners.delete(ee);
-            }
-        }
-        if (listeners.size === 0) {
-            emitter.events.delete(event);
-        }
-        return true;
-    }
-
-    function SetWorld(world, ...children) {
-        children.forEach(child => {
-            if (child.world) {
-                Emit(child.world, RemovedFromWorldEvent, child, child.world);
-                Emit(child, RemovedFromWorldEvent, child, child.world);
-            }
-            child.world = world;
-            Emit(world, AddedToWorldEvent, child, world);
-            Emit(child, AddedToWorldEvent, child, world);
-        });
-        return children;
-    }
-
-    function SetParent(parent, ...children) {
-        children.forEach(child => {
-            if (child.parent) {
-                RemoveChild(child.parent, child);
-            }
-            child.parent = parent;
-        });
-        const parentWorld = parent.world;
-        if (parentWorld) {
-            SetWorld(parentWorld, ...DepthFirstSearch(parent));
-        }
-        return children;
-    }
-
-    function AddChild(parent, child) {
-        parent.children.push(child);
-        SetParent(parent, child);
-        child.transform.updateWorld();
-        return child;
-    }
-
-    const DIRTY_CONST = {
-        CLEAR: 0,
-        TRANSFORM: 1,
-        UPDATE: 2,
-        CHILD_CACHE: 4,
-        POST_RENDER: 8,
-        COLORS: 16,
-        BOUNDS: 32,
-        TEXTURE: 64,
-        FRAME: 128,
-        ALPHA: 256,
-        CHILD: 512,
-        DEFAULT: 1 + 2 + 16 + 32,
-        USER1: 536870912,
-        USER2: 1073741824,
-        USER3: 2147483648,
-        USER4: 4294967296
-    };
-
-    function RemoveChildrenBetween(parent, beginIndex = 0, endIndex) {
-        const children = parent.children;
-        if (endIndex === undefined) {
-            endIndex = children.length;
-        }
-        const range = endIndex - beginIndex;
-        if (range > 0 && range <= endIndex) {
-            const removed = children.splice(beginIndex, range);
-            removed.forEach(child => {
-                child.parent = null;
-            });
-            return removed;
-        }
-        else {
-            return [];
-        }
-    }
-
-    function DestroyChildren(parent, beginIndex = 0, endIndex) {
-        const removed = RemoveChildrenBetween(parent, beginIndex, endIndex);
-        removed.forEach(child => {
-            child.destroy();
-        });
-    }
-
-    function RemoveChildren(parent, ...children) {
-        children.forEach(child => {
-            RemoveChild(parent, child);
-        });
-        return children;
-    }
-
-    function ReparentChildren(parent, newParent, beginIndex = 0, endIndex) {
-        const moved = RemoveChildrenBetween(parent, beginIndex, endIndex);
-        SetParent(newParent, ...moved);
-        moved.forEach(child => {
-            child.transform.updateWorld();
-        });
-        return moved;
-    }
 
     function AddToDOM(element, parent) {
         const target = GetElement(parent);
@@ -2341,6 +2348,136 @@ void main (void)
         }
     }
 
+    function BatchSingleQuad(renderer, x, y, width, height, u0, v0, u1, v1, textureIndex = 0, packedColor = 4294967295) {
+        const shader = renderer.shaders.current;
+        const buffer = shader.buffer;
+        const F32 = buffer.vertexViewF32;
+        const U32 = buffer.vertexViewU32;
+        const offset = shader.count * buffer.quadElementSize;
+        F32[offset + 0] = x;
+        F32[offset + 1] = y;
+        F32[offset + 2] = u0;
+        F32[offset + 3] = v1;
+        F32[offset + 4] = textureIndex;
+        U32[offset + 5] = packedColor;
+        F32[offset + 6] = x;
+        F32[offset + 7] = y + height;
+        F32[offset + 8] = u0;
+        F32[offset + 9] = v0;
+        F32[offset + 10] = textureIndex;
+        U32[offset + 11] = packedColor;
+        F32[offset + 12] = x + width;
+        F32[offset + 13] = y + height;
+        F32[offset + 14] = u1;
+        F32[offset + 15] = v0;
+        F32[offset + 16] = textureIndex;
+        U32[offset + 17] = packedColor;
+        F32[offset + 18] = x + width;
+        F32[offset + 19] = y;
+        F32[offset + 20] = u1;
+        F32[offset + 21] = v1;
+        F32[offset + 22] = textureIndex;
+        U32[offset + 23] = packedColor;
+        shader.count++;
+    }
+
+    function DrawTexturedQuad$1(renderer, x, y, width, height, u0, v0, u1, v1, textureIndex = 0, packedColor = 4294967295) {
+        renderer.shaders.setDefault(textureIndex);
+        BatchSingleQuad(renderer, x, y, width, height, u0, v0, u1, v1, textureIndex, packedColor);
+        renderer.shaders.popAndRebind();
+    }
+
+    class Layer extends GameObject {
+        constructor() {
+            super();
+            this.type = 'Layer';
+            this.transform.passthru = true;
+            this.willRender = false;
+        }
+    }
+
+    class RenderLayer extends Layer {
+        constructor() {
+            super();
+            this.type = 'RenderLayer';
+            this.willRender = true;
+            this.willRenderChildren = true;
+            this.willCacheChildren = true;
+            this.setDirty(DIRTY_CONST.CHILD_CACHE);
+            const width = GetWidth();
+            const height = GetHeight();
+            const resolution = GetResolution();
+            const texture = new Texture(null, width * resolution, height * resolution);
+            texture.binding = new GLTextureBinding(texture);
+            texture.binding.framebuffer = CreateFramebuffer(texture.binding.texture);
+            this.texture = texture;
+            this.framebuffer = texture.binding.framebuffer;
+        }
+        renderGL(renderer) {
+            if (this.numChildren > 0) {
+                renderer.flush();
+                if (this.isDirty(DIRTY_CONST.CHILD_CACHE)) {
+                    renderer.fbo.add(this.framebuffer, true);
+                    this.clearDirty(DIRTY_CONST.CHILD_CACHE);
+                }
+                else {
+                    renderer.fbo.add(this.framebuffer, false);
+                    this.postRenderGL(renderer);
+                }
+            }
+        }
+        postRenderGL(renderer) {
+            const texture = this.texture;
+            renderer.flush();
+            renderer.fbo.pop();
+            const { u0, v0, u1, v1 } = texture.firstFrame;
+            renderer.textures.bind(texture);
+            DrawTexturedQuad$1(renderer, 0, 0, texture.width, texture.height, u0, v0, u1, v1);
+            renderer.textures.unbind();
+            this.clearDirty(DIRTY_CONST.TRANSFORM);
+        }
+    }
+
+    class EffectLayer extends RenderLayer {
+        constructor() {
+            super();
+            this.shaders = [];
+            this.type = 'EffectLayer';
+        }
+        postRenderGL(renderer) {
+            const shaders = this.shaders;
+            const texture = this.texture;
+            renderer.flush();
+            renderer.fbo.pop();
+            if (shaders.length === 0) {
+                const { u0, v0, u1, v1 } = texture.firstFrame;
+                renderer.textures.bind(texture);
+                DrawTexturedQuad$1(renderer, 0, 0, texture.width, texture.height, u0, v0, u1, v1);
+                renderer.textures.unbind();
+            }
+            else {
+                let prevTexture = texture;
+                for (let i = 0; i < shaders.length; i++) {
+                    const shader = shaders[i];
+                    const { u0, v0, u1, v1 } = prevTexture.firstFrame;
+                    if (renderer.shaders.set(shader, 0)) {
+                        shader.renderToFBO = true;
+                        renderer.textures.bind(prevTexture);
+                        BatchSingleQuad(renderer, 0, 0, prevTexture.width, prevTexture.height, u0, v0, u1, v1);
+                        renderer.shaders.pop();
+                        renderer.textures.unbind();
+                        prevTexture = shader.texture;
+                    }
+                }
+                const { u0, v0, u1, v1 } = prevTexture.firstFrame;
+                renderer.textures.bind(prevTexture);
+                DrawTexturedQuad$1(renderer, 0, 0, prevTexture.width, prevTexture.height, u0, v0, u1, v1);
+                renderer.textures.unbind();
+            }
+            this.clearDirty(DIRTY_CONST.TRANSFORM);
+        }
+    }
+
     const WorldRenderEvent = 'worldrender';
 
     const WorldShutdownEvent = 'worldshutdown';
@@ -2534,6 +2671,127 @@ void main (void)
         }
     }
 
+    class Loader extends EventEmitter {
+        constructor() {
+            super();
+            this.baseURL = '';
+            this.path = '';
+            this.crossOrigin = 'anonymous';
+            this.maxParallelDownloads = -1;
+            this.isLoading = false;
+            this.reset();
+        }
+        reset() {
+            this.isLoading = false;
+            this.queue = new Set();
+            this.inflight = new Set();
+            this.completed = new Set();
+            this.progress = 0;
+        }
+        add(...file) {
+            file.forEach(entity => {
+                entity.loader = this;
+                this.queue.add(entity);
+            });
+            return this;
+        }
+        start() {
+            if (this.isLoading) {
+                return null;
+            }
+            return new Promise((resolve, reject) => {
+                this.completed.clear();
+                this.progress = 0;
+                if (this.queue.size > 0) {
+                    this.isLoading = true;
+                    this.onComplete = resolve;
+                    this.onError = reject;
+                    Emit(this, 'start');
+                    this.nextFile();
+                }
+                else {
+                    this.progress = 1;
+                    Emit(this, 'complete');
+                    resolve();
+                }
+            });
+        }
+        nextFile() {
+            let limit = this.queue.size;
+            if (this.maxParallelDownloads !== -1) {
+                limit = Math.min(limit, this.maxParallelDownloads) - this.inflight.size;
+            }
+            if (limit) {
+                const iterator = this.queue.values();
+                while (limit > 0) {
+                    const file = iterator.next().value;
+                    this.inflight.add(file);
+                    this.queue.delete(file);
+                    file.load()
+                        .then((file) => this.fileComplete(file))
+                        .catch((file) => this.fileError(file));
+                    limit--;
+                }
+            }
+            else if (this.inflight.size === 0) {
+                this.stop();
+            }
+        }
+        stop() {
+            if (!this.isLoading) {
+                return;
+            }
+            this.isLoading = false;
+            Emit(this, 'complete', this.completed);
+            this.onComplete();
+            this.completed.clear();
+        }
+        updateProgress(file) {
+            this.inflight.delete(file);
+            this.completed.add(file);
+            const totalCompleted = this.completed.size;
+            const totalQueued = this.queue.size + this.inflight.size;
+            if (totalCompleted > 0) {
+                this.progress = totalCompleted / (totalCompleted + totalQueued);
+            }
+            Emit(this, 'progress', this.progress, totalCompleted, totalQueued);
+            this.nextFile();
+        }
+        fileComplete(file) {
+            Emit(this, 'filecomplete', file);
+            this.updateProgress(file);
+        }
+        fileError(file) {
+            Emit(this, 'fileerror', file);
+            this.updateProgress(file);
+        }
+        totalFilesToLoad() {
+            return this.queue.size + this.inflight.size;
+        }
+        setBaseURL(url = '') {
+            if (url !== '' && url.substr(-1) !== '/') {
+                url = url.concat('/');
+            }
+            this.baseURL = url;
+            return this;
+        }
+        setPath(path = '') {
+            if (path !== '' && path.substr(-1) !== '/') {
+                path = path.concat('/');
+            }
+            this.path = path;
+            return this;
+        }
+        setCORS(crossOrigin) {
+            this.crossOrigin = crossOrigin;
+            return this;
+        }
+        setMaxParallelDownloads(max) {
+            this.maxParallelDownloads = max;
+            return this;
+        }
+    }
+
     function GetConfigValue(config, property, defaultValue) {
         if (Object.prototype.hasOwnProperty.call(config, property)) {
             return config[property];
@@ -2654,17 +2912,80 @@ void main (void)
         return file;
     }
 
+    class Shader extends SingleTextureQuadShader {
+        constructor(config = {}) {
+            super(config);
+        }
+    }
+
+    const plasmaFragmentShader = `
+precision mediump float;
+
+varying vec2 vTextureCoord;
+varying float vTextureId;
+varying vec4 vTintColor;
+
+uniform sampler2D uTexture;
+uniform float uTime;
+uniform vec2 uResolution;
+
+const float PI = 3.14159265;
+float ptime = uTime * 0.0001;
+float alpha = 1.0;
+float size = 0.03;
+float redShift = 0.5;
+float greenShift = 0.5;
+float blueShift = 0.9;
+
+void main (void)
+{
+    vec4 tcolor = texture2D(uTexture, vTextureCoord);
+
+    float color1, color2, color;
+
+    color1 = (sin(dot(gl_FragCoord.xy, vec2(sin(ptime * 3.0), cos(ptime * 3.0))) * 0.02 + ptime * 3.0) + 1.0) / 2.0;
+    vec2 center = vec2(640.0 / 2.0, 360.0 / 2.0) + vec2(640.0 / 2.0 * sin(-ptime * 3.0), 360.0 / 2.0 * cos(-ptime * 3.0));
+    color2 = (cos(length(gl_FragCoord.xy - center) * size) + 1.0) / 2.0;
+    color = (color1 + color2) / 2.0;
+
+    float red = (cos(PI * color / redShift + ptime * 3.0) + 1.0) / 2.0;
+    float green = (sin(PI * color / greenShift + ptime * 3.0) + 1.0) / 2.0;
+    float blue = (sin(PI * color / blueShift + ptime * 3.0) + 1.0) / 2.0;
+
+    gl_FragColor = tcolor * vec4(red, green, blue, alpha);
+}`;
     class Demo extends Scene {
         constructor() {
             super();
-            ImageFile('logo', 'assets/logo.png').load().then(() => {
-                const world = new StaticWorld(this);
-                const logo = new Sprite(400, 300, 'logo');
-                AddChild(world, logo);
-            });
+            const loader = new Loader();
+            loader.setPath('/phaser4-examples/public/assets/');
+            // loader.setPath('/examples/public/assets/');
+            loader.add(ImageFile('background', 'farm-background.png'));
+            loader.add(ImageFile('ayu', 'ayu.png'));
+            loader.add(ImageFile('logo', 'logo.png'));
+            loader.add(ImageFile('rocket', 'rocket.png'));
+            loader.add(ImageFile('farm', 'farm-logo.png'));
+            loader.add(ImageFile('star', 'star.png'));
+            loader.add(ImageFile('bubble', 'bubble256.png'));
+            loader.start().then(() => this.create());
+        }
+        create() {
+            const plasma = new Shader({ fragmentShader: plasmaFragmentShader, batchSize: 1 });
+            const world = new StaticWorld(this);
+            const layer = new EffectLayer();
+            layer.shaders.push(plasma);
+            const bg = new Sprite(400, 300, 'background');
+            const logo = new Sprite(200, 300, 'logo');
+            const ayu = new Sprite(600, 300, 'ayu');
+            const farm = new Sprite(200, 150, 'farm');
+            const rocket = new Sprite(150, 500, 'rocket');
+            const bubble = new Sprite(400, 450, 'bubble');
+            const star = new Sprite(650, 500, 'star');
+            AddChildren(layer, ayu, logo, farm, rocket, bubble);
+            AddChildren(world, bg, layer);
         }
     }
     new Game(WebGLRenderer$1(), Size(800, 600), Parent('example'), BackgroundColor(0x640b50), Scenes(Demo));
 
 }());
-//# sourceMappingURL=sprite1.js.map
+//# sourceMappingURL=plasma.js.map

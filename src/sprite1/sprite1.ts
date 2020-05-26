@@ -1,37 +1,31 @@
-import AddChild from '@phaserjs/phaser/gameobjects/container/AddChild';
-import { Game, StaticScene } from '@phaserjs/phaser';
-import { BackgroundColor, Size, Parent, Scenes } from '@phaserjs/phaser/config';
-import Sprite from '@phaserjs/phaser/gameobjects/sprite/Sprite';
-import ImageFile from '@phaserjs/phaser/loader/files/ImageFile';
+import { BackgroundColor, Parent, Scenes, Size, WebGLRenderer } from '@phaserjs/phaser/config';
+import { Game, Scene } from '@phaserjs/phaser';
 
-class Demo extends StaticScene
+import { AddChild } from '@phaserjs/phaser/display/';
+import { ImageFile } from '@phaserjs/phaser/loader/files/ImageFile';
+import { Sprite } from '@phaserjs/phaser/gameobjects/sprite/Sprite';
+import { StaticWorld } from '@phaserjs/phaser/world';
+
+class Demo extends Scene
 {
-    logo: Sprite;
-
     constructor ()
     {
-        super({ willUpdate: false });
+        super();
 
         ImageFile('logo', 'assets/logo.png').load().then(() => {
 
-            this.logo = new Sprite(400, 300, 'logo');
+            const world = new StaticWorld(this);
 
-            const logo2 = new Sprite(400, 400, 'logo').setScale(0.5);
+            const logo = new Sprite(400, 300, 'logo');
 
-            AddChild(this.world, this.logo, logo2);
-
-            this.willUpdate = true;
+            AddChild(world, logo);
     
         });
-    }
-
-    update ()
-    {
-        this.logo.rotation += 0.01;
     }
 }
 
 new Game(
+    WebGLRenderer(),
     Size(800, 600),
     Parent('example'),
     BackgroundColor(0x640b50),

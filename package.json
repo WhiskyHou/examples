@@ -24,7 +24,7 @@
     },
     "homepage": "https://github.com/phaserjs/examples#readme",
     "devDependencies": {
-        "@phaserjs/phaser": "0.0.20",
+        "@phaserjs/phaser": "0.0.22",
         "@rollup/plugin-image": "^2.0.5",
         "@rollup/plugin-node-resolve": "^8.0.0",
         "@rollup/plugin-typescript": "^4.1.2",

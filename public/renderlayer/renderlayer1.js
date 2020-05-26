@@ -1,6 +1,182 @@
 (function () {
     'use strict';
 
+    function InOut(v) {
+        if (v === 0) {
+            return 0;
+        }
+        else if (v === 1) {
+            return 1;
+        }
+        else {
+            return 0.5 * (1 - Math.cos(Math.PI * v));
+        }
+    }
+
+    function DepthFirstSearch(parent) {
+        const stack = [parent];
+        const output = [];
+        while (stack.length > 0) {
+            const node = stack.shift();
+            output.push(node);
+            const numChildren = node.numChildren;
+            if (numChildren > 0) {
+                for (let i = numChildren - 1; i >= 0; i--) {
+                    stack.unshift(node.children[i]);
+                }
+            }
+        }
+        output.shift();
+        return output;
+    }
+
+    function GetChildIndex(parent, child) {
+        return parent.children.indexOf(child);
+    }
+
+    function RemoveChildAt(parent, index) {
+        const children = parent.children;
+        let child;
+        if (index >= 0 && index < children.length) {
+            const removed = children.splice(index, 1);
+            if (removed[0]) {
+                child = removed[0];
+                child.parent = null;
+            }
+        }
+        return child;
+    }
+
+    function RemoveChild(parent, child) {
+        const currentIndex = GetChildIndex(parent, child);
+        if (currentIndex > -1) {
+            RemoveChildAt(parent, currentIndex);
+        }
+        return child;
+    }
+
+    const AddedToWorldEvent = 'addedtoworld';
+
+    const RemovedFromWorldEvent = 'removedfromworld';
+
+    function Emit(emitter, event, ...args) {
+        if (emitter.events.size === 0 || !emitter.events.has(event)) {
+            return false;
+        }
+        const listeners = emitter.events.get(event);
+        for (const ee of listeners) {
+            ee.callback.apply(ee.context, args);
+            if (ee.once) {
+                listeners.delete(ee);
+            }
+        }
+        if (listeners.size === 0) {
+            emitter.events.delete(event);
+        }
+        return true;
+    }
+
+    function SetWorld(world, ...children) {
+        children.forEach(child => {
+            if (child.world) {
+                Emit(child.world, RemovedFromWorldEvent, child, child.world);
+                Emit(child, RemovedFromWorldEvent, child, child.world);
+            }
+            child.world = world;
+            Emit(world, AddedToWorldEvent, child, world);
+            Emit(child, AddedToWorldEvent, child, world);
+        });
+        return children;
+    }
+
+    function SetParent(parent, ...children) {
+        children.forEach(child => {
+            if (child.parent) {
+                RemoveChild(child.parent, child);
+            }
+            child.parent = parent;
+        });
+        const parentWorld = parent.world;
+        if (parentWorld) {
+            SetWorld(parentWorld, ...DepthFirstSearch(parent));
+        }
+        return children;
+    }
+
+    function AddChild(parent, child) {
+        parent.children.push(child);
+        SetParent(parent, child);
+        child.transform.updateWorld();
+        return child;
+    }
+
+    function AddChildren(parent, ...children) {
+        children.forEach(child => {
+            AddChild(parent, child);
+        });
+        return children;
+    }
+
+    const DIRTY_CONST = {
+        CLEAR: 0,
+        TRANSFORM: 1,
+        UPDATE: 2,
+        CHILD_CACHE: 4,
+        POST_RENDER: 8,
+        COLORS: 16,
+        BOUNDS: 32,
+        TEXTURE: 64,
+        FRAME: 128,
+        ALPHA: 256,
+        CHILD: 512,
+        DEFAULT: 1 + 2 + 16 + 32,
+        USER1: 536870912,
+        USER2: 1073741824,
+        USER3: 2147483648,
+        USER4: 4294967296
+    };
+
+    function RemoveChildrenBetween(parent, beginIndex = 0, endIndex) {
+        const children = parent.children;
+        if (endIndex === undefined) {
+            endIndex = children.length;
+        }
+        const range = endIndex - beginIndex;
+        if (range > 0 && range <= endIndex) {
+            const removed = children.splice(beginIndex, range);
+            removed.forEach(child => {
+                child.parent = null;
+            });
+            return removed;
+        }
+        else {
+            return [];
+        }
+    }
+
+    function DestroyChildren(parent, beginIndex = 0, endIndex) {
+        const removed = RemoveChildrenBetween(parent, beginIndex, endIndex);
+        removed.forEach(child => {
+            child.destroy();
+        });
+    }
+
+    function RemoveChildren(parent, ...children) {
+        children.forEach(child => {
+            RemoveChild(parent, child);
+        });
+        return children;
+    }
+
+    function ReparentChildren(parent, newParent, beginIndex = 0, endIndex) {
+        const moved = RemoveChildrenBetween(parent, beginIndex, endIndex);
+        SetParent(newParent, ...moved);
+        moved.forEach(child => {
+            child.transform.updateWorld();
+        });
+        return moved;
+    }
+
     let instance;
     let frame = 0;
     let elapsed = 0;
@@ -184,7 +360,7 @@
         pop() {
             this.stack.pop();
             const len = this.stack.length;
-            if (len > 1) {
+            if (len > 0) {
                 const entry = this.stack[len - 1];
                 this.set(entry.framebuffer, false, entry.width, entry.height);
             }
@@ -1161,6 +1337,78 @@ void main (void)
         }
     }
 
+    function NOOP() {
+    }
+
+    class Vec2Callback {
+        constructor(callback, x = 0, y = 0, compareValue = false) {
+            this.compareValue = false;
+            this._x = x;
+            this._y = y;
+            this.callback = callback;
+            this.compareValue = compareValue;
+        }
+        set(x = 0, y = 0) {
+            this._x = x;
+            this._y = y;
+            this.callback(this);
+            return this;
+        }
+        destroy() {
+            this.callback = NOOP;
+        }
+        set x(value) {
+            if (!this.compareValue || (this.compareValue && value !== this._x)) {
+                this._x = value;
+                this.callback(this);
+            }
+        }
+        get x() {
+            return this._x;
+        }
+        set y(value) {
+            if (!this.compareValue || (this.compareValue && value !== this._x)) {
+                this._y = value;
+                this.callback(this);
+            }
+        }
+        get y() {
+            return this._y;
+        }
+    }
+
+    class Vec2 {
+        constructor(x = 0, y = 0) {
+            this.set(x, y);
+        }
+        set(x = 0, y = 0) {
+            this.x = x;
+            this.y = y;
+            return this;
+        }
+        getArray() {
+            return [this.x, this.y];
+        }
+        fromArray(src) {
+            return this.set(src[0], src[1]);
+        }
+        toString() {
+            return `[x=${this.x}, y=${this.y}]`;
+        }
+    }
+
+    function Between(min, max) {
+        return Math.floor(Math.random() * (max - min + 1) + min);
+    }
+
+    function Copy(src, target) {
+        return target.set(src.a, src.b, src.c, src.d, src.tx, src.ty);
+    }
+
+    function FloatBetween(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
     function Contains(rect, x, y) {
         if (rect.width <= 0 || rect.height <= 0) {
             return false;
@@ -1206,46 +1454,6 @@ void main (void)
         }
     }
 
-    function NOOP() {
-    }
-
-    class Vec2Callback {
-        constructor(callback, x = 0, y = 0, compareValue = false) {
-            this.compareValue = false;
-            this._x = x;
-            this._y = y;
-            this.callback = callback;
-            this.compareValue = compareValue;
-        }
-        set(x = 0, y = 0) {
-            this._x = x;
-            this._y = y;
-            this.callback(this);
-            return this;
-        }
-        destroy() {
-            this.callback = NOOP;
-        }
-        set x(value) {
-            if (!this.compareValue || (this.compareValue && value !== this._x)) {
-                this._x = value;
-                this.callback(this);
-            }
-        }
-        get x() {
-            return this._x;
-        }
-        set y(value) {
-            if (!this.compareValue || (this.compareValue && value !== this._x)) {
-                this._y = value;
-                this.callback(this);
-            }
-        }
-        get y() {
-            return this._y;
-        }
-    }
-
     class StaticCamera {
         constructor() {
             this.type = 'StaticCamera';
@@ -1273,168 +1481,11 @@ void main (void)
         }
     }
 
-    function DepthFirstSearch(parent) {
-        const stack = [parent];
-        const output = [];
-        while (stack.length > 0) {
-            const node = stack.shift();
-            output.push(node);
-            const numChildren = node.numChildren;
-            if (numChildren > 0) {
-                for (let i = numChildren - 1; i >= 0; i--) {
-                    stack.unshift(node.children[i]);
-                }
-            }
-        }
-        output.shift();
-        return output;
-    }
-
-    function GetChildIndex(parent, child) {
-        return parent.children.indexOf(child);
-    }
-
-    function RemoveChildAt(parent, index) {
-        const children = parent.children;
-        let child;
-        if (index >= 0 && index < children.length) {
-            const removed = children.splice(index, 1);
-            if (removed[0]) {
-                child = removed[0];
-                child.parent = null;
-            }
-        }
-        return child;
-    }
-
-    function RemoveChild(parent, child) {
-        const currentIndex = GetChildIndex(parent, child);
-        if (currentIndex > -1) {
-            RemoveChildAt(parent, currentIndex);
-        }
-        return child;
-    }
-
-    const AddedToWorldEvent = 'addedtoworld';
-
     const DestroyEvent = 'destroy';
 
     const PostUpdateEvent = 'postupdate';
 
-    const RemovedFromWorldEvent = 'removedfromworld';
-
     const UpdateEvent = 'update';
-
-    function Emit(emitter, event, ...args) {
-        if (emitter.events.size === 0 || !emitter.events.has(event)) {
-            return false;
-        }
-        const listeners = emitter.events.get(event);
-        for (const ee of listeners) {
-            ee.callback.apply(ee.context, args);
-            if (ee.once) {
-                listeners.delete(ee);
-            }
-        }
-        if (listeners.size === 0) {
-            emitter.events.delete(event);
-        }
-        return true;
-    }
-
-    function SetWorld(world, ...children) {
-        children.forEach(child => {
-            if (child.world) {
-                Emit(child.world, RemovedFromWorldEvent, child, child.world);
-                Emit(child, RemovedFromWorldEvent, child, child.world);
-            }
-            child.world = world;
-            Emit(world, AddedToWorldEvent, child, world);
-            Emit(child, AddedToWorldEvent, child, world);
-        });
-        return children;
-    }
-
-    function SetParent(parent, ...children) {
-        children.forEach(child => {
-            if (child.parent) {
-                RemoveChild(child.parent, child);
-            }
-            child.parent = parent;
-        });
-        const parentWorld = parent.world;
-        if (parentWorld) {
-            SetWorld(parentWorld, ...DepthFirstSearch(parent));
-        }
-        return children;
-    }
-
-    function AddChild(parent, child) {
-        parent.children.push(child);
-        SetParent(parent, child);
-        child.transform.updateWorld();
-        return child;
-    }
-
-    const DIRTY_CONST = {
-        CLEAR: 0,
-        TRANSFORM: 1,
-        UPDATE: 2,
-        CHILD_CACHE: 4,
-        POST_RENDER: 8,
-        COLORS: 16,
-        BOUNDS: 32,
-        TEXTURE: 64,
-        FRAME: 128,
-        ALPHA: 256,
-        CHILD: 512,
-        DEFAULT: 1 + 2 + 16 + 32,
-        USER1: 536870912,
-        USER2: 1073741824,
-        USER3: 2147483648,
-        USER4: 4294967296
-    };
-
-    function RemoveChildrenBetween(parent, beginIndex = 0, endIndex) {
-        const children = parent.children;
-        if (endIndex === undefined) {
-            endIndex = children.length;
-        }
-        const range = endIndex - beginIndex;
-        if (range > 0 && range <= endIndex) {
-            const removed = children.splice(beginIndex, range);
-            removed.forEach(child => {
-                child.parent = null;
-            });
-            return removed;
-        }
-        else {
-            return [];
-        }
-    }
-
-    function DestroyChildren(parent, beginIndex = 0, endIndex) {
-        const removed = RemoveChildrenBetween(parent, beginIndex, endIndex);
-        removed.forEach(child => {
-            child.destroy();
-        });
-    }
-
-    function RemoveChildren(parent, ...children) {
-        children.forEach(child => {
-            RemoveChild(parent, child);
-        });
-        return children;
-    }
-
-    function ReparentChildren(parent, newParent, beginIndex = 0, endIndex) {
-        const moved = RemoveChildrenBetween(parent, beginIndex, endIndex);
-        SetParent(newParent, ...moved);
-        moved.forEach(child => {
-            child.transform.updateWorld();
-        });
-        return moved;
-    }
 
     function AddToDOM(element, parent) {
         const target = GetElement(parent);
@@ -1822,26 +1873,6 @@ void main (void)
         }
     }
 
-    class Vec2 {
-        constructor(x = 0, y = 0) {
-            this.set(x, y);
-        }
-        set(x = 0, y = 0) {
-            this.x = x;
-            this.y = y;
-            return this;
-        }
-        getArray() {
-            return [this.x, this.y];
-        }
-        fromArray(src) {
-            return this.set(src[0], src[1]);
-        }
-        toString() {
-            return `[x=${this.x}, y=${this.y}]`;
-        }
-    }
-
     function UpdateLocalTransform(transform) {
         const local = transform.local;
         const x = transform.position.x;
@@ -1852,10 +1883,6 @@ void main (void)
         const skewX = transform.skew.x;
         const skewY = transform.skew.y;
         local.set(Math.cos(rotation + skewY) * scaleX, Math.sin(rotation + skewY) * scaleX, -Math.sin(rotation - skewX) * scaleY, Math.cos(rotation - skewX) * scaleY, x, y);
-    }
-
-    function Copy(src, target) {
-        return target.set(src.a, src.b, src.c, src.d, src.tx, src.ty);
     }
 
     function UpdateWorldTransform(gameObject) {
@@ -2534,6 +2561,127 @@ void main (void)
         }
     }
 
+    class Loader extends EventEmitter {
+        constructor() {
+            super();
+            this.baseURL = '';
+            this.path = '';
+            this.crossOrigin = 'anonymous';
+            this.maxParallelDownloads = -1;
+            this.isLoading = false;
+            this.reset();
+        }
+        reset() {
+            this.isLoading = false;
+            this.queue = new Set();
+            this.inflight = new Set();
+            this.completed = new Set();
+            this.progress = 0;
+        }
+        add(...file) {
+            file.forEach(entity => {
+                entity.loader = this;
+                this.queue.add(entity);
+            });
+            return this;
+        }
+        start() {
+            if (this.isLoading) {
+                return null;
+            }
+            return new Promise((resolve, reject) => {
+                this.completed.clear();
+                this.progress = 0;
+                if (this.queue.size > 0) {
+                    this.isLoading = true;
+                    this.onComplete = resolve;
+                    this.onError = reject;
+                    Emit(this, 'start');
+                    this.nextFile();
+                }
+                else {
+                    this.progress = 1;
+                    Emit(this, 'complete');
+                    resolve();
+                }
+            });
+        }
+        nextFile() {
+            let limit = this.queue.size;
+            if (this.maxParallelDownloads !== -1) {
+                limit = Math.min(limit, this.maxParallelDownloads) - this.inflight.size;
+            }
+            if (limit) {
+                const iterator = this.queue.values();
+                while (limit > 0) {
+                    const file = iterator.next().value;
+                    this.inflight.add(file);
+                    this.queue.delete(file);
+                    file.load()
+                        .then((file) => this.fileComplete(file))
+                        .catch((file) => this.fileError(file));
+                    limit--;
+                }
+            }
+            else if (this.inflight.size === 0) {
+                this.stop();
+            }
+        }
+        stop() {
+            if (!this.isLoading) {
+                return;
+            }
+            this.isLoading = false;
+            Emit(this, 'complete', this.completed);
+            this.onComplete();
+            this.completed.clear();
+        }
+        updateProgress(file) {
+            this.inflight.delete(file);
+            this.completed.add(file);
+            const totalCompleted = this.completed.size;
+            const totalQueued = this.queue.size + this.inflight.size;
+            if (totalCompleted > 0) {
+                this.progress = totalCompleted / (totalCompleted + totalQueued);
+            }
+            Emit(this, 'progress', this.progress, totalCompleted, totalQueued);
+            this.nextFile();
+        }
+        fileComplete(file) {
+            Emit(this, 'filecomplete', file);
+            this.updateProgress(file);
+        }
+        fileError(file) {
+            Emit(this, 'fileerror', file);
+            this.updateProgress(file);
+        }
+        totalFilesToLoad() {
+            return this.queue.size + this.inflight.size;
+        }
+        setBaseURL(url = '') {
+            if (url !== '' && url.substr(-1) !== '/') {
+                url = url.concat('/');
+            }
+            this.baseURL = url;
+            return this;
+        }
+        setPath(path = '') {
+            if (path !== '' && path.substr(-1) !== '/') {
+                path = path.concat('/');
+            }
+            this.path = path;
+            return this;
+        }
+        setCORS(crossOrigin) {
+            this.crossOrigin = crossOrigin;
+            return this;
+        }
+        setMaxParallelDownloads(max) {
+            this.maxParallelDownloads = max;
+            return this;
+        }
+    }
+
     function GetConfigValue(config, property, defaultValue) {
         if (Object.prototype.hasOwnProperty.call(config, property)) {
             return config[property];
@@ -2570,6 +2718,212 @@ void main (void)
             this.events = new Map();
             Install(this, config);
         }
+    }
+
+    function Linear(v) {
+        return v;
+    }
+
+    class TweenProperty {
+        constructor(name, end) {
+            this.name = name;
+            if (typeof end === 'string') {
+                this.modifier = end.substr(0, 1);
+                this.end = parseFloat(end.substring(1));
+            }
+            else {
+                this.end = end;
+            }
+        }
+        getEnd(start) {
+            const modifier = this.modifier;
+            const end = this.end;
+            if (modifier === '+') {
+                return start + end;
+            }
+            else if (modifier === '-') {
+                return start - end;
+            }
+            else {
+                return end;
+            }
+        }
+        to(target) {
+            const current = target[this.name];
+            const end = this.getEnd(current);
+            this.start = current;
+            this.end = end;
+        }
+        from(target) {
+            const current = target[this.name];
+            const end = this.getEnd(current);
+            this.start = end;
+            this.end = current;
+            target[this.name] = end;
+        }
+        update(target, v) {
+            target[this.name] = this.start + ((this.end - this.start) * v);
+        }
+    }
+
+    class NanoTween {
+        constructor(target, emitter, autoStart = true) {
+            this.state = { running: false, repeat: false, hold: false, delay: false, yoyo: false, yoyoing: false, autoStart: true, reversed: false };
+            this.init = { duration: 0, repeat: 0, repeatDelay: 0, hold: 0, delay: 0 };
+            this.counters = { repeat: 0, delay: 0, progress: 0, elapsed: 0 };
+            this.ease = Linear;
+            this.properties = [];
+            if (!emitter) {
+                emitter = GameInstance.get();
+            }
+            this.target = target;
+            this.state.autoStart = autoStart;
+            this.emitter = emitter;
+        }
+        to(duration, properties = null) {
+            return this.add(duration, properties, false);
+        }
+        from(duration, properties = null) {
+            return this.add(duration, properties, true);
+        }
+        add(duration, props, reversed) {
+            const state = this.state;
+            const init = this.init;
+            if (state.running) {
+                return this;
+            }
+            const properties = this.properties;
+            for (const [name, value] of Object.entries(props)) {
+                properties.push(new TweenProperty(name, value));
+            }
+            init.duration = duration;
+            state.reversed = reversed;
+            if (state.autoStart) {
+                this.start();
+            }
+            return this;
+        }
+        start() {
+            const state = this.state;
+            if (state.running) {
+                return this;
+            }
+            const target = this.target;
+            const properties = this.properties;
+            properties.forEach(property => {
+                if (state.reversed) {
+                    property.from(target);
+                }
+                else {
+                    property.to(target);
+                }
+            });
+            state.running = true;
+            this.listener = On(this.emitter, UpdateEvent, (delta) => this.update(delta));
+            return this;
+        }
+        restart() {
+            const state = this.state;
+            const init = this.init;
+            const counters = this.counters;
+            if (!state) {
+                throw 'Cannot restart destroyed tween';
+            }
+            counters.delay = init.delay;
+            counters.elapsed = 0;
+            counters.progress = 0;
+            counters.repeat = init.repeat;
+            state.yoyoing = false;
+            state.running = true;
+            return this;
+        }
+        update(delta) {
+            const state = this.state;
+            const init = this.init;
+            const counters = this.counters;
+            if (!state.running) {
+                return false;
+            }
+            if (counters.delay > 0) {
+                counters.delay -= delta;
+                if (counters.delay <= 0) {
+                    counters.elapsed = Math.abs(counters.delay) - delta;
+                    counters.delay = 0;
+                }
+                else {
+                    return false;
+                }
+            }
+            counters.elapsed += delta;
+            const progress = Math.min(counters.elapsed / init.duration, 1);
+            counters.progress = progress;
+            const v = (state.yoyoing) ? this.ease(1 - progress) : this.ease(progress);
+            const target = this.target;
+            const properties = this.properties;
+            properties.forEach(property => {
+                property.update(target, v);
+            });
+            if (progress < 1) {
+                return false;
+            }
+            const diff = counters.elapsed - init.duration;
+            if (state.yoyo && !state.yoyoing) {
+                counters.elapsed = diff;
+                counters.delay = init.hold - diff;
+                state.yoyoing = true;
+                return false;
+            }
+            if (counters.repeat > 0) {
+                counters.repeat--;
+                counters.elapsed = diff;
+                counters.delay = init.repeatDelay - diff;
+                state.yoyoing = false;
+                return false;
+            }
+            console.log('Tween Complete');
+            this.destroy();
+            return true;
+        }
+        delay(duration) {
+            const delay = duration;
+            this.init.delay = delay;
+            this.counters.delay = delay;
+            return this;
+        }
+        hold(duration) {
+            this.init.hold = duration;
+            return this;
+        }
+        yoyo(value = true) {
+            this.state.yoyo = value;
+            return this;
+        }
+        repeat(repeatCount = 1, delay = 0) {
+            const init = this.init;
+            this.state.repeat = (repeatCount > 0);
+            this.counters.repeat = repeatCount;
+            init.repeat = repeatCount;
+            init.repeatDelay = delay;
+            return this;
+        }
+        easing(f) {
+            this.ease = f;
+            return this;
+        }
+        destroy() {
+            Off(this.emitter, UpdateEvent, this.listener);
+            this.properties.length = 0;
+            this.target = null;
+            this.ease = null;
+            this.emitter = null;
+            this.state = null;
+            this.init = null;
+            this.counters = null;
+        }
+    }
+
+    function AddTween(target, emitter = null, autoStart = true) {
+        return new NanoTween(target, emitter, autoStart);
     }
 
     class File {
@@ -2657,14 +3011,34 @@ void main (void)
     class Demo extends Scene {
         constructor() {
             super();
-            ImageFile('logo', 'assets/logo.png').load().then(() => {
-                const world = new StaticWorld(this);
-                const logo = new Sprite(400, 300, 'logo');
-                AddChild(world, logo);
-            });
+            const loader = new Loader();
+            loader.setPath('/phaser4-examples/public/assets/');
+            // loader.setPath('/examples/public/assets/');
+            loader.add(ImageFile('logo', 'logo.png'));
+            loader.add(ImageFile('rocket', 'rocket.png'));
+            loader.add(ImageFile('star', 'star.png'));
+            loader.add(ImageFile('bubble', 'bubble256.png'));
+            loader.add(ImageFile('skull', 'skull.png'));
+            loader.start().then(() => this.create());
+        }
+        create() {
+            const world = new StaticWorld(this);
+            // const layer = new RenderLayer();
+            for (let i = 0; i < 500; i++) {
+                let x = Between(0, 800);
+                let y = Between(0, 600);
+                let s = FloatBetween(0.2, 0.5);
+                let star = new Sprite(x, y, 'star').setScale(s);
+                AddChild(world, star);
+                // AddChild(layer, star);
+            }
+            const logo = new Sprite(400, 100, 'logo');
+            AddTween(logo).to(2000, { y: 500 }).repeat(1000).yoyo().easing(InOut);
+            // AddChildren(world, layer, logo);
+            AddChildren(world, logo);
         }
     }
     new Game(WebGLRenderer$1(), Size(800, 600), Parent('example'), BackgroundColor(0x640b50), Scenes(Demo));
 
 }());
-//# sourceMappingURL=sprite1.js.map
+//# sourceMappingURL=renderlayer1.js.map
